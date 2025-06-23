@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { Product } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { ProductPaginationDto } from './dto/product-pagination.dto';
+import { Like } from 'typeorm';
 
 @Injectable()
 export class ProductsService {
@@ -56,4 +58,63 @@ export class ProductsService {
     const product = await this.findOne(id);
     await this.productRepo.softRemove(product);
   }
+
+  /**
+   * Busca de um produto
+   */
+  async findAll(query: ProductPaginationDto) {
+  const {
+    page = 1,
+    limit = 10,
+    search,
+    minPrice,
+    maxPrice,
+    sortBy = 'created_at',
+    sortOrder = 'ASC',
+    onlyOutOfStock,
+  } = query;
+
+  const where: any = {};
+
+  // 🔍 Busca textual
+  if (search) {
+    where.name = Like(`%${search}%`);
+  }
+
+  // 📦 Estoque zerado
+  if (onlyOutOfStock === 'true') {
+    where.stock = 0;
+  }
+
+  // 💰 Faixa de preço
+  if (minPrice !== undefined || maxPrice !== undefined) {
+    where.price = {};
+    if (minPrice !== undefined) {
+      where.price['$gte'] = minPrice;
+    }
+    if (maxPrice !== undefined) {
+      where.price['$lte'] = maxPrice;
+    }
+  }
+
+  const [data, total] = await this.productRepo.findAndCount({
+    where,
+    order: {
+      [sortBy]: sortOrder.toUpperCase(),
+    },
+    take: limit,
+    skip: (page - 1) * limit,
+    withDeleted: false,
+  });
+
+  return {
+    data,
+    meta: {
+      page,
+      limit,
+      totalItems: total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
 }
