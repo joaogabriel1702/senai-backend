@@ -1,11 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Like, MoreThanOrEqual, LessThanOrEqual, Repository } from 'typeorm';
 import { Product } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductPaginationDto } from './dto/product-pagination.dto';
-import { Like } from 'typeorm';
 
 @Injectable()
 export class ProductsService {
@@ -23,10 +22,85 @@ export class ProductsService {
   }
 
   /**
-   * Lista todos os produtos
+   * Lista produtos com filtros e paginação
    */
-  async findAll(): Promise<Product[]> {
-    return this.productRepo.find();
+  async findAll(query: ProductPaginationDto) {
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      minPrice,
+      maxPrice,
+      sortBy = 'created_at',
+      sortOrder = 'ASC',
+      onlyOutOfStock,
+      hasDiscount,
+    } = query;
+
+    const where: any = {};
+
+    // Busca textual por nome
+    if (search) {
+      where.name = Like(`%${search}%`);
+    }
+
+    // Estoque zerado
+    if (onlyOutOfStock === 'true') {
+      where.stock = 0;
+    }
+
+    // Faixa de preço
+    if (minPrice !== undefined || maxPrice !== undefined) {
+      where.price = {};
+      if (minPrice !== undefined) {
+        where.price = MoreThanOrEqual(minPrice);
+      }
+      if (maxPrice !== undefined) {
+        where.price = LessThanOrEqual(maxPrice);
+      }
+    }
+
+    // Filtro por desconto ativo
+    if (hasDiscount === 'true') {
+      where.discountPercent = MoreThanOrEqual(1);
+    }
+    if (hasDiscount === 'false') {
+      where.discountPercent = null;
+    }
+
+    const [data, total] = await this.productRepo.findAndCount({
+      where,
+      order: {
+        [sortBy]: sortOrder.toUpperCase(),
+      },
+      take: limit,
+      skip: (page - 1) * limit,
+      withDeleted: false,
+    });
+
+    // Adicionar campo calculado priceWithDiscount
+    const dataWithDiscount = data.map((product) => {
+      const discount = (product as any).discountPercent;
+      const priceWithDiscount = discount
+        ? Number((product.price * (1 - discount / 100)).toFixed(2))
+        : product.price;
+
+      return {
+        ...product,
+        priceWithDiscount,
+        discountPercent: discount || null,
+      };
+    });
+
+    return {
+      data: dataWithDiscount,
+      meta: {
+        page,
+        limit,
+        totalItems: total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   /**
@@ -58,63 +132,4 @@ export class ProductsService {
     const product = await this.findOne(id);
     await this.productRepo.softRemove(product);
   }
-
-  /**
-   * Busca de um produto
-   */
-  async findAll(query: ProductPaginationDto) {
-  const {
-    page = 1,
-    limit = 10,
-    search,
-    minPrice,
-    maxPrice,
-    sortBy = 'created_at',
-    sortOrder = 'ASC',
-    onlyOutOfStock,
-  } = query;
-
-  const where: any = {};
-
-  // 🔍 Busca textual
-  if (search) {
-    where.name = Like(`%${search}%`);
-  }
-
-  // 📦 Estoque zerado
-  if (onlyOutOfStock === 'true') {
-    where.stock = 0;
-  }
-
-  // 💰 Faixa de preço
-  if (minPrice !== undefined || maxPrice !== undefined) {
-    where.price = {};
-    if (minPrice !== undefined) {
-      where.price['$gte'] = minPrice;
-    }
-    if (maxPrice !== undefined) {
-      where.price['$lte'] = maxPrice;
-    }
-  }
-
-  const [data, total] = await this.productRepo.findAndCount({
-    where,
-    order: {
-      [sortBy]: sortOrder.toUpperCase(),
-    },
-    take: limit,
-    skip: (page - 1) * limit,
-    withDeleted: false,
-  });
-
-  return {
-    data,
-    meta: {
-      page,
-      limit,
-      totalItems: total,
-      totalPages: Math.ceil(total / limit),
-    },
-  };
-}
 }

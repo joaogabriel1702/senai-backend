@@ -60,4 +60,8 @@ export class ProductPaginationDto {
   @IsOptional()
   @IsBooleanString()
   onlyOutOfStock?: string; // 'true' ou 'false' como string
+
+  @IsOptional()
+  @IsBooleanString()
+  hasDiscount?: string; // 'true' ou 'false' como string
 }
