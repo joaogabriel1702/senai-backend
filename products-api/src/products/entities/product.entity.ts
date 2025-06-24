@@ -1,7 +1,7 @@
 import {
   Entity,
-  PrimaryGeneratedColumn,
   Column,
+  PrimaryGeneratedColumn,
   CreateDateColumn,
   UpdateDateColumn,
   DeleteDateColumn,
@@ -12,17 +12,20 @@ export class Product {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ unique: true, length: 100 })
+  @Column({ unique: true })
   name: string;
 
-  @Column({ nullable: true, length: 300 })
-  description?: string;
+  @Column({ nullable: true })
+  description: string;
 
   @Column('decimal', { precision: 10, scale: 2 })
   price: number;
 
   @Column('int')
   stock: number;
+
+  @Column({ type: 'int', nullable: true })
+  discountPercent?: number;
 
   @CreateDateColumn()
   created_at: Date;
